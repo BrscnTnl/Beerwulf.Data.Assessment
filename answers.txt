@@ -1,0 +1,144 @@
+Question 2
+ASK - 
+Entity Relationship Diagram was made using sql management studio -without extra point questions' modifications
+Load scripts (data included) generated using sql management studio -without extra point questions' modifications
+**Extra** point: 
+- define a classification (it can be anything you want) for breaking the customer account balances into 3 logical groups
+- add a field for this new classification
+
+For the first two questions. I created a view in sql named [dbo].[W_ClusteringData] (Also added to ddl). It has total QUANTITY and EXTENDEDPRICE for each customer. Then I applied MinMaxScale and feed it into K-Means cluster
+algorithm with 3 clusters (CustomerSegmentation() function in ETL.py) after that I inserted those classes into new table in order to keep data science & analytics job transactions away from operational tables. 
+That new table (SEGMENT, also added to ddl) has only two columns, SEG_CUSTKEY,SEG_SEGMENT.
+
+- add revenue per line item
+I sent a mail about this one. I think it should be like this;
+
+ALTER TABLE LINEITEM ADD [L_REVENUE] AS ([L_EXTENDEDPRICE] * (1-[L_DISCOUNT]) * (1-[L_TAX])) PERSISTED;
+
+
+-------------------------------
+Question 3
+There are multiple solutions to this question depending on where is the source and target is held that i can think of right now;
+1-Develop an SSIS package and use it in azure data factory. And schedule the adf
+2-If you have an mssql server that runs on azure, use that ssis package natively on that server. And schedule the sql server agent
+3-If the source files is in (assuming they are files) azure data lake storage or blob and the target is another azure product (mssql, synapse, etc) use the azure data factory natively and schedule it
+4-If we are getting the data from outside source via some APIs and we don't apply logic, using azure functions (with compatible programming language)  and adding Timer Trigger with CRON expression
+5-If we are using more complex python & libraries (Airflow etc), using container might be useful but I have never done it before
+6-If we are getting data via Azure IoT Hub, we simply use azure stream analytics job to sink the data to required target
+
+
+**Extra** point: 
+EP1 Question - What would you do to cater for data arriving in random order? 
+EP1 Answer : Store the data in azure data lake or blobs, then process it in intervals
+EP2 Question - What about if the data comes from a stream, and arrives at random times?
+EP2 Answer : Azure Event hub can be used and the method would be similar to EP1 Answer OR Event Hub + ASA > Sink into Final DB
+
+-------------------------------
+Question 4:
+For python - Refer to Question 3 - Answers 4&5 additionaly using GitHub or Azure DevOps allows change tracking and CI/CD pipelines
+For SSIS packages its easy to deploy but mssql server required. The rest is scheduling a sql server agent job and store the packages Azure DevOps 
+
+-------------------------------
+Question 5:
+5.A.
+FRANCE	53688941.76
+UNITED STATES	65148808.56
+CHINA	65163845.89
+
+SELECT TOP 3 CAST([N_NAME] AS VARCHAR(100)),SUM([O_TOTALPRICE])    
+FROM [dbo].[ORDERS] AS O
+INNER JOIN [dbo].[CUSTOMER] AS C ON O.[O_CUSTKEY] = C.[C_CUSTKEY]
+INNER JOIN [dbo].[NATION] AS N ON C.[C_NATIONKEY] = N.[N_NATIONKEY]
+GROUP BY CAST([N_NAME] AS VARCHAR(100))
+ORDER BY SUM([O_TOTALPRICE]) 
+
+There is a O_ORDERSTATUS column in Orders table but I couldn't filter out because there is no parameter table.
+
+5.B.
+MAIL : 1326
+
+SELECT CAST([L_SHIPMODE] AS VARCHAR(15)),COUNT(*)
+FROM [dbo].[ORDERS] AS O
+INNER JOIN [dbo].[CUSTOMER] AS C ON O.[O_CUSTKEY] = C.[C_CUSTKEY]
+INNER JOIN [dbo].[LINEITEM] AS L ON O.[O_ORDERKEY] = [L_ORDERKEY]
+WHERE C.[C_NATIONKEY] IN (3,4,10)
+GROUP BY CAST([L_SHIPMODE] AS VARCHAR(15))
+ORDER BY COUNT(*)
+
+5.C.
+This has two answers
+If we are trying to answer "when did we made our most sales in our history" then the answer is 
+
+
+199312	30844712.52
+199310	30697388.10
+199201	30469896.18
+199608	30170817.04
+199512	30079346.72
+
+But If we are trying to answer "In which months we make the most sales (like figuring out the peak sales)"  then the answer is 
+
+
+5	194423025.45
+3	191112208.41
+1	188111820.23
+7	185564589.11
+4	184443340.92
+
+SELECT MONTH([O_ORDERDATE]),SUM([O_TOTALPRICE])
+FROM [BEERWULF].[dbo].[ORDERS]
+GROUP BY MONTH([O_ORDERDATE])
+ORDER BY SUM([O_TOTALPRICE]) DESC
+
+
+5.D.
+
+O_CUSTKEY	QUANTITY	EXTENDEDPRICE
+1489		3868		5457264.61
+214			3369		4742495.34
+73			3384		4714753.47
+1396		3408		4678182.65
+1246		3226		4676315.79
+
+SELECT TOP (5) 
+[O_CUSTKEY]
+,SUM([L_QUANTITY]) AS QUANTITY
+,SUM([L_EXTENDEDPRICE]) AS EXTENDEDPRICE
+FROM [dbo].[LINEITEM] AS L 
+INNER JOIN [dbo].[ORDERS] AS O ON L.[L_ORDERKEY] = O.[O_ORDERKEY]
+GROUP BY [O_CUSTKEY]
+ORDER BY SUM([L_EXTENDEDPRICE]) DESC,SUM([L_QUANTITY]) DESC
+
+
+5.E.  (01 July to 30 June)
+
+--Fiscal Year Comparison by June
+
+FISCAL_YEAR	TOTALPRICE	previous_year	difference_previous_year	PCT_CHANGE
+1992	164781588.44	NULL	NULL	NULL
+1993	312564117.94	164781588.44	147782529.50	89.683800
+1994	338965453.44	312564117.94	26401335.50		8.446600
+1995	314421423.57	338965453.44	-24544029.87	-7.240800
+1996	321958459.88	314421423.57	7537036.31		2.397100
+1997	331221439.55	321958459.88	9262979.67		2.877000
+1998	314548802.02	331221439.55	-16672637.53	-5.033600
+1999	28935545.18		314548802.02	-285613256.84	-90.800900
+
+First two years was apperantly well, third year company stabilized (still increasing the revenue but not too much. Controllable growth). 
+Following years are normal company wave, it can be. More important KPI is the net profit here not just gross revenue.
+1999 : R.I.P.
+
+SELECT 
+[FISCAL_YEAR] AS [FISCAL_YEAR],
+[O_TOTALPRICE] as TOTALPRICE,
+LAG([O_TOTALPRICE]) OVER (ORDER BY [FISCAL_YEAR] ) AS previous_year,
+[O_TOTALPRICE] - LAG([O_TOTALPRICE]) OVER (ORDER BY [FISCAL_YEAR] ) AS difference_previous_year,
+(([O_TOTALPRICE] - LAG([O_TOTALPRICE]) OVER (ORDER BY [FISCAL_YEAR] )) / (LAG([O_TOTALPRICE]) OVER (ORDER BY [FISCAL_YEAR] )))*100 AS PCT_CHANGE
+FROM 
+(
+	SELECT CASE WHEN MONTH([O_ORDERDATE]) > 6 THEN YEAR([O_ORDERDATE]) + 1 ELSE YEAR([O_ORDERDATE]) END AS [FISCAL_YEAR],
+	SUM([O_TOTALPRICE]) AS [O_TOTALPRICE]
+	FROM [BEERWULF].[dbo].[ORDERS]
+	GROUP BY CASE WHEN MONTH([O_ORDERDATE]) > 6 THEN YEAR([O_ORDERDATE]) + 1 ELSE YEAR([O_ORDERDATE]) END
+) AS X
+ORDER BY [FISCAL_YEAR]
