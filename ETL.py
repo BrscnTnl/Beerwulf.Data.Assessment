@@ -3,7 +3,6 @@ import shutil
 import pyodbc
 import pandas as pd
 import csv
-from matplotlib import pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler
 
