@@ -1,0 +1,136 @@
+Question 2
+ASK - 
+Entity Relationship Diagram was made using sql management studio -with extra point questions' modifications
+Load scripts (DDL.sql, DML.sql) generated using sql management studio -with extra point questions' modifications
+**Extra** point: 
+- define a classification (it can be anything you want) for breaking the customer account balances into 3 logical groups
+- add a field for this new classification
+
+For the first two questions. I created a view in sql named [dbo].[W_ClusteringData] (Also added to ddl). It has total QUANTITY and EXTENDEDPRICE for each customer. Then I applied MinMaxScale and feed it into K-Means cluster
+algorithm with 3 clusters (CustomerSegmentation() function in ETL.py) after that I inserted those classes into new table in order to keep data science & analytics job transactions away from operational tables. 
+That new table (SEGMENT, also added to ddl) has only two columns, SEG_CUSTKEY,SEG_SEGMENT.
+
+- add revenue per line item
+Revenue is added in DML.sql to [T_D_LINEITEM] table with following formula ([L_EXTENDEDPRICE] * (1-[L_DISCOUNT]) * (1-[L_TAX]))
+
+
+
+-------------------------------
+Question 3
+There are multiple solutions to this question depending on where is the source and target is held that i can think of right now;
+1-Develop an SSIS package and use it in azure data factory. And schedule the adf
+2-If you have a mssql server that runs on azure, use that ssis package natively on that server. And schedule the sql server agent
+3-If the source files is in (assuming they are files) azure data lake storage or blob and the target is another azure product (mssql, synapse, etc) use the azure data factory natively and schedule it
+4-If we are getting the data from outside source via some APIs and we don't apply logic, using azure functions (with compatible programming language)  and adding Timer Trigger with CRON expression
+5-If we are using more complex python & libraries (Airflow etc),using crontab as scheduler based on different dags which were developed according to each table in star schema but I have never done it before
+6-If we are getting data via Azure IoT Hub, we simply use azure stream analytics job to sink the data to required target
+
+
+**Extra** point: 
+EP1 Question - What would you do to cater for data arriving in random order? 
+EP1 Answer : Store the data in azure data lake or blobs, then process it in intervals
+EP2 Question - What about if the data comes from a stream, and arrives at random times?
+EP2 Answer : Azure Event hub can be used and the method would be similar to EP1 Answer OR Event Hub + ASA > Sink into Final DB
+
+-------------------------------
+Question 4:
+For python - Refer to Question 3 - Answers 4&5 additionaly using GitHub or Azure DevOps allows change tracking and CI/CD pipelines
+ 
+There can be 2 different approach for SSIS packages;
+
+1) To change previous version on production via Azure Pipelines. So, the deployment gets done and if there is not any job on agent jobs, a new job must be set based on new deployed package.
+2) Related package can be set as project based and this package should be sent to SSISDB on MSSQL Server. Then, if there is not any job on agent jobs, a new job must be set based on project based solution in SSDB.
+-------------------------------
+Question 5:
+5.A.
+FRANCE	49590747.787899
+UNITED STATES	60129420.275150
+CHINA	60148123.238552
+
+SELECT TOP 3 CAST([N_NAME] AS VARCHAR(100)),SUM(DIM.REVENUE)  
+FROM T_F_LINEITEM AS FACT 
+INNER JOIN [dbo].[T_D_LINEITEM] AS DIM ON FACT.LINEITEMKEY = DIM.LINEITEMKEY
+INNER JOIN [dbo].[ORDERS] AS O ON FACT.ORDERKEY = O.O_ORDERKEY
+INNER JOIN [dbo].[CUSTOMER] AS C ON FACT.[CUSTKEY] = C.[C_CUSTKEY]
+INNER JOIN [dbo].[NATION] AS N ON FACT.[CUST_NATIONKEY] = N.[N_NATIONKEY]
+GROUP BY CAST([N_NAME] AS VARCHAR(100))
+ORDER BY SUM(DIM.REVENUE) 
+
+
+5.B.
+MAIL : 1326
+
+SELECT CAST([SHIPMODE] AS VARCHAR(15)),COUNT(*)
+FROM T_F_LINEITEM AS FACT 
+INNER JOIN [dbo].[T_D_LINEITEM] AS DIM ON FACT.LINEITEMKEY = DIM.LINEITEMKEY
+WHERE FACT.CUST_NATIONKEY IN (3,4,10)
+GROUP BY CAST([SHIPMODE] AS VARCHAR(15))
+ORDER BY COUNT(*)
+
+5.C.
+1994-1	159606544.63
+1996-12	157326256.49
+1992-3	155082347.97
+1993-12	154539763.91
+1992-1	154064495.19
+
+SELECT TOP 5 CAST(YEAR([O_ORDERDATE]) AS NVARCHAR(4))+'-'+CAST( MONTH([O_ORDERDATE]) AS NVARCHAR(2)),SUM([O_TOTALPRICE])
+FROM T_F_LINEITEM AS FACT 
+INNER JOIN [dbo].[ORDERS] AS O ON FACT.ORDERKEY = O.O_ORDERKEY
+GROUP BY CAST(YEAR([O_ORDERDATE]) AS NVARCHAR(4))+'-'+CAST( MONTH([O_ORDERDATE]) AS NVARCHAR(2))
+ORDER BY SUM([O_TOTALPRICE]) DESC
+
+
+5.D.
+
+CUSTKEY	QUANTITY	REVENUE
+1489	3868	4998405.650576
+214		3369	4332512.050531
+73		3384	4293941.739891
+1246	3226	4287727.871453
+1396	3408	4265825.582087
+
+SELECT TOP (5) 
+FACT.CUSTKEY
+,SUM([QUANTITY]) AS QUANTITY
+,SUM([REVENUE]) AS [REVENUE]
+FROM T_F_LINEITEM AS FACT 
+INNER JOIN [dbo].[T_D_LINEITEM] AS DIM ON FACT.LINEITEMKEY = DIM.LINEITEMKEY
+GROUP BY FACT.CUSTKEY
+ORDER BY SUM([REVENUE])  DESC,SUM([QUANTITY]) DESC
+
+
+5.E.  (01 July to 30 June)
+
+--Fiscal Year Comparison by June
+
+FISCAL_YEAR	REVENUE	previous_year	difference_previous_year	PCT_CHANGE
+1992	151969916.958786	NULL	NULL	NULL
+1993	288185166.637712	151969916.958786	136215249.678926	89.633000
+1994	312872377.603271	288185166.637712	24687210.965559		8.566400
+1995	290016751.004954	312872377.603271	-22855626.598317	-7.305000
+1996	297149930.903236	290016751.004954	7133179.898282		2.459500
+1997	305847217.114747	297149930.903236	8697286.211511		2.926900
+1998	290168886.071780	305847217.114747	-15678331.042967	-5.126100
+1999	26662290.852036		290168886.071780	-263506595.219744	-90.811400
+
+First two years was apperantly well, third year company stabilized (still increasing the revenue but not too much. Controllable growth). 
+Following years are normal company wave, it can be. More important KPI is the net profit here not just gross revenue.
+1999 : R.I.P.
+
+SELECT 
+[FISCAL_YEAR] AS [FISCAL_YEAR],
+[REVENUE] as [REVENUE],
+LAG([REVENUE]) OVER (ORDER BY [FISCAL_YEAR] ) AS previous_year,
+[REVENUE] - LAG([REVENUE]) OVER (ORDER BY [FISCAL_YEAR] ) AS difference_previous_year,
+(([REVENUE] - LAG([REVENUE]) OVER (ORDER BY [FISCAL_YEAR] )) / (LAG([REVENUE]) OVER (ORDER BY [FISCAL_YEAR] )))*100 AS PCT_CHANGE
+FROM 
+(
+	SELECT CASE WHEN MONTH([O_ORDERDATE]) > 6 THEN YEAR([O_ORDERDATE]) + 1 ELSE YEAR([O_ORDERDATE]) END AS [FISCAL_YEAR],
+	SUM([REVENUE]) AS [REVENUE]
+	FROM T_F_LINEITEM AS FACT 
+	INNER JOIN [dbo].[T_D_LINEITEM] AS DIM ON FACT.LINEITEMKEY = DIM.LINEITEMKEY
+	INNER JOIN [dbo].[ORDERS] AS O ON FACT.ORDERKEY = O.O_ORDERKEY
+	GROUP BY CASE WHEN MONTH([O_ORDERDATE]) > 6 THEN YEAR([O_ORDERDATE]) + 1 ELSE YEAR([O_ORDERDATE]) END
+) AS X
+ORDER BY [FISCAL_YEAR]
